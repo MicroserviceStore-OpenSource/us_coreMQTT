@@ -1,0 +1,2 @@
+https://github.com/FreeRTOS/coreMQTT,04845c6
+https://github.com/Mbed-TLS/mbedtls.git,2fc8413

@@ -1,0 +1,8 @@
+#ifndef __VENDOR_RP_CUSTOMTAGS_H
+#define __VENDOR_RP_CUSTOMTAGS_H
+
+#define RP_CUSTOM_ITEM_ROOTCA           0x8020FFFF
+#define RP_CUSTOM_ITEM_DEVCERT          0x8021FFFF
+#define RP_CUSTOM_ITEM_PKEY             0x8022FFFF
+
+#endif /* __VENDOR_RP_CUSTOMTAGS_H */

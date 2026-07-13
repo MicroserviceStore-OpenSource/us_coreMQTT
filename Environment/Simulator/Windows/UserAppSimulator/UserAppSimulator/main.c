@@ -1,49 +1,120 @@
-
 /* Enable all the log levels */
 #define LOG_INFO_ENABLED        1
 #define LOG_WARNING_ENABLED     1
 #define LOG_ERROR_ENABLED       1
 #include "SysCall.h"
 
-#ifdef US_AI_GENERATED
-    #include "us_public_headers.inc"
-#else
-    #include "us-Template.h"
-#endif /* US_AI_GENERATED */
+#include "us-coreMQTT.h"
 
-#define CHECK_US_ERR(_sysStatus, _usStatus) \
-                if (_sysStatus != SysStatus_Success || _usStatus != usStatus_Success) \
-                { LOG_PRINTF(" > us Test Failed. Line %d. Sys Status %d | us Status %d. Exiting the User Application...", __LINE__, _sysStatus, _usStatus); Sys_Exit(); }
+#include "VendorRPCustomTags.h"
+
+#include <string.h>
 
 int main(void)
 {
     SysStatus retVal;
+    bool testPass = true;
 
     LOG_PRINTF(" > Container : Microservice Test User App");
 
     SYS_INITIALISE_IPC_MESSAGEBOX(retVal, 4);
 
-#ifdef US_AI_GENERATED
-    #include "us_init_func.inc"
-    #include "us_operation_test.inc"
-#else /* US_AI_GENERATED */
-    us_Template_Initialise();
-
+    retVal = us_coreMQTT_Initialise();
+    if (retVal != SysStatus_Success)
     {
-        usStatus status;
-        int32_t a = 5;
-        int32_t b = 6;
-        int32_t expectedResult = a + b;
-        int32_t result = 0;
-
-        retVal = us_Template_Sum(a, b, &result, &status);
-        CHECK_US_ERR(retVal, status);
-
-        LOG_PRINTF(" > us Sum Test %s", result == expectedResult ? "Success" : "Failed");
+        if (retVal == SysStatus_NotFound)
+        {
+            LOG_PRINTF(" > us_coreMQTT does not exists.");
+        }
+        else
+        {
+            LOG_PRINTF(" > us_coreMQTT_Initialise failed with error %d. Exiting the User Application...", retVal);
+        }
+        Sys_Exit();
     }
-#endif /* US_AI_GENERATED */
 
-    LOG_PRINTF(" > Exiting the User Application");
+    /* Test Cases */
+    {
+        usStatus expected;
+        usStatus actual;
+
+        const char* host        = "test.mosquitto.org";
+        const char* clientId    = "usCoreMqttSmokeTest";
+        const char* topic       = "us/coreMQTT/test";
+        const char* payload     = "hello-from-microservice";
+
+        /* Test 1 : Connect (smoke - expected to acquire the single session) */
+        expected = usStatus_Success;
+        actual = us_coreMQTT_Connect(host, (uint16_t)strlen(host), 8883,
+                                     clientId, (uint16_t)strlen(clientId),
+                                     60U,
+                                     RP_CUSTOM_ITEM_ROOTCA, RP_CUSTOM_ITEM_DEVCERT, RP_CUSTOM_ITEM_PKEY);
+        LOG_PRINTF(" > Test Connect    : expected %d, actual %d -> %s",
+                   expected, actual, (actual == expected) ? "SUCCESS" : "FAIL");
+        if (actual != expected)
+        {
+            testPass = false;
+        }
+
+        if (actual == usStatus_Success)
+        {
+            /* Test 2 : Subscribe */
+            expected = usStatus_Success;
+            actual = us_coreMQTT_Subscribe(topic, (uint16_t)strlen(topic), us_MQTTQoS0);
+            LOG_PRINTF(" > Test Subscribe  : expected %d, actual %d -> %s",
+                       expected, actual, (actual == expected) ? "SUCCESS" : "FAIL");
+            if (actual != expected)
+            {
+                testPass = false;
+            }
+
+            /* Test 3 : Publish */
+            expected = usStatus_Success;
+            actual = us_coreMQTT_Publish(topic, (uint16_t)strlen(topic),
+                                         (const uint8_t*)payload, (uint16_t)strlen(payload),
+                                         us_MQTTQoS0);
+            LOG_PRINTF(" > Test Publish    : expected %d, actual %d -> %s",
+                       expected, actual, (actual == expected) ? "SUCCESS" : "FAIL");
+            if (actual != expected)
+            {
+                testPass = false;
+            }
+
+            /* Test 4 : ProcessLoop */
+            expected = usStatus_Success;
+            actual = us_coreMQTT_ProcessLoop(1000U);
+            LOG_PRINTF(" > Test ProcessLoop: expected %d, actual %d -> %s",
+                       expected, actual, (actual == expected) ? "SUCCESS" : "FAIL");
+            if (actual != expected)
+            {
+                testPass = false;
+            }
+
+            /* Test 5 : Disconnect (releases session) */
+            expected = usStatus_Success;
+            actual = us_coreMQTT_Disconnect();
+            LOG_PRINTF(" > Test Disconnect : expected %d, actual %d -> %s",
+                       expected, actual, (actual == expected) ? "SUCCESS" : "FAIL");
+            if (actual != expected)
+            {
+                testPass = false;
+            }
+        }
+
+        /* Test 6 : Operation on a non-existent session must be rejected */
+        expected = usStatus_InvalidSession;
+        actual = us_coreMQTT_Publish(topic, (uint16_t)strlen(topic),
+                                     (const uint8_t*)payload, (uint16_t)strlen(payload),
+                                     us_MQTTQoS0);
+        LOG_PRINTF(" > Test NoSession  : expected %d, actual %d -> %s",
+                   expected, actual, (actual == expected) ? "SUCCESS" : "FAIL");
+        if (actual != expected)
+        {
+            testPass = false;
+        }
+    }
+
+    LOG_PRINTF(" > usTest : %s", testPass ? "SUCCESS" : "FAIL");
     /* Exit the Container */
     Sys_Exit();
 

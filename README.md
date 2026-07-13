@@ -1,581 +1,80 @@
-# Embedded Microservice Template Project for C Programming Language
+# coreMQTT Microservice
 
-## 1. Overview
+An embedded Microservice that wraps the **FreeRTOS coreMQTT** client library and
+exposes it as an independent, run-time isolated, access-controlled executable
+for Microcontrollers (Arm Cortex-M / RISC-V) running under the embedded
+Microservice Runtime (eMR).
 
-Creating a Microservice is a quite lightweight process. Developer is free to use any toolchain, development environment and programming language.
+## Overview
 
-This repository is just a helper template repository that helps developers to create their custom Microservices.
+This Microservice provides a lightweight, session-based MQTT client. It receives
+requests over IPC, parses them, calls the coreMQTT API, and responds back to the
+caller. The TLS transport used underneath is provided by the eMR as a
+**Universal Resource**.
 
-You can see the quick steps to create a Microservice using this repository.
-1. [Download the Development Package](#21-download-microservice-package)
-2. [Configure the Microservice](#22-configure-the-microservice)
-3. [Build the Microservice ](#26-build)
-4. [Get Deployment/Output Files ](#27-output--deployment-files)
+### Credits & License (IMPORTANT)
 
-## 2. Create a Microservice
-Microservice Development is a lightweight process with some minor prerequisites.
+> This Microservice is built on top of the open-source **coreMQTT** library.
+>
+> - **Owner / Account**: FreeRTOS (Amazon Web Services)
+> - **Repository**: https://github.com/FreeRTOS/coreMQTT
+> - **Pinned Commit**: `04845c6`
+> - **License**: MIT License
+> - **Website**: https://www.freertos.org/mqtt/index.html
+>
+> **All credit for the coreMQTT library goes to FreeRTOS / Amazon Web Services
+> and its contributors.** This project only wraps their work into an embedded
+> Microservice; it does not claim ownership of the coreMQTT source.
 
-### 2.1. Download Microservice Package
-Please login into your Developer Dashboard, find "Developer Zone" -> "Development Packages", and select the CPU Processor you would like to work with, and download the package.
+## How to Build and Run
+ - Clone the open-source library and initialise the repository using `make init_repo`
+    - It will clone coreMQTT (see the version in the `Libs/libraries.txt`). It also clones mbedtls for the simulator projects to simulate the `TLS Universal Resource`
+ - Copy the required `CPU Core SDK` from Microservice Store to `Environment/CPU/`.
+ - Generate a config file under `Configurations\`
+ - Create a Microservice Store Package using `make package CONFIG=<CONFIG_NAME>`
 
-> Copy the package to \"**Environment/CPU/**\" directory.
+## Running Test Simulator
+You dont need and embedded target to run the tests. There is a simulator config where you can run the Microservice and a Test Application in the development environment (Linux). Test Application tries to connect to `https://test.mosquitto.org` using the Microservice.
 
-For example: Arm Cortex-M4 Microcontrollers
+   ```
+        host        = "test.mosquitto.org";
+        clientId    = "usCoreMqttSmokeTest";
+        topic       = "us/coreMQTT/test";
+        payload     = "hello-from-microservice";
+        port        = 8883;
+   ```
 
-```C
-Environment
-├─ CPU
-│  ├─ CortexM4
-│  ├─ ...
+### Creating Test TLS Certificates
+ - Download the Root CA certificate from: `https://test.mosquitto.org/ssl/mosquitto.org.crt`, save as `8020FFFF` to the repository's ROOT directory.
+ - Follow `https://test.mosquitto.org/ssl/index.php` and create the private key(PKEY) and Device Certificate.
+   - Save the Device Certificate as `8021FFFF` to the repository's ROOT directory.
+   - Save the Private as `8022FFFF` to the repository's ROOT directory.
+
+### Run The Simulator
+ > make simulator CONFIG=sim
+
+You should see the test results
+
 ```
-
-### 2.2. Configure the Microservice
-Please create a config file under **Configurations/** directory. 
-
-A Microservice can have different versions with different configurations, and these configuration files are used to differentiate the builds.
-
-> * The configuration file extension will be **"*.config"**.
-
-Fields to set;
-
-| Field                            | Description |
-|----------------------------------|-------------|
-| **uSERVICE_NAME**               | Max 15 ASCII character Microservice Name. |
-| **uSERVICE_UID**                | Max 15-character Microservice Unique ID to universially identify the Microservice. Must match the same ID in Microservice Store |
-| **uSERVICE_VERSION_STR**        | Microservice Version in String Format. <Major>.<Minor> |
-| **uSERVICE_MAINSTACK_SIZE**     | Main Stack Size of the Microservice. Only applies to the main thread; developers may create child threads at runtime with custom sizes. |
-| **uSERVICE_CPU_CORE**           | Target CPU Core for the Microservice build. Must match the CPU Core selected during Microservice Package Download (see `Environment/CPU/<CPUCORE>`). |
-| **uSERVICE_CFLAGS**             | Compile-time flags for the Microservice (CFLAGS). |
-| **uSERVICE_LDFLAGS**            | Link-time flags for the Microservice (LDFLAGS). |
-| **uSERVICE_SOURCE_FILES**       | Source files used to build the Microservice. |
-| **uSERVICE_INCLUDE_DIRS**       | Include directories used during the build. |
-
-Toolchain-Specific Flags 
-(GCC)
-
-| Field                            | Description |
-|----------------------------------|-------------|
-| **uSERVICE_TOOLCHAIN_GCC_PATH** | Path to the GCC toolchain. Developers can use any toolchain, and must specify the path. |
-| **uSERVICE_GCC_LD_PATH**        | [Optional] Path to the linker script (GCC-specific). |
-
-Please see an example hello world example below, name MyService.config, for CortexM4
-
-```C
-uSERVICE_NAME = MyService
-uSERVICE_UID = MYSERVICE
-uSERVICE_VERSION_STR = "0.9"
-uSERVICE_MAINSTACK_SIZE = 0x800
-
-uSERVICE_CPU_CORE = CortexM4
-
-uSERVICE_CFLAGS = -O2
-uSERVICE_LDFLAGS = \
-uSERVICE_SOURCE_FILES = Source/main.c
-uSERVICE_INCLUDE_DIRS = -IInclude/
-
-uSERVICE_TOOLCHAIN_GCC_PATH="GNU Arm Embedded Toolchain/10 2021.10/bin/"
-
-uSERVICE_GCC_LD_PATH=microservice.ld
-```
-
-And to run this configuration
-> make CONFIG=MyService
-
-### 2.3. Linker Scripts
-Microservice Runtime shall have some sections and shall expose some symbols.
-
-✅ All these already handled using Environment/Toolchain/\<TOOLCHAIN\>/microservice_template.ld so there is no need to do anything by the developer.
-
-> * Developer can use this file or can create a new copy, and point this .ld
-
-> * The developer is free to modify and additional sections and symbols.
-
-See [Generic Microservice Requirements](Documentation/MicroserviceRequirements.md).
-
-### 2.4. Required Symbols by Microservice Runtime
-Microservice Runtime expects some symbols from a Microservice. 
-
-✅ All these already handled using Environment/Toolchain/\<TOOLCHAIN\>/vector.s so there is no need to do anything by the developer.
-
-See [Required Symbols](Documentation/MicroserviceRequirements.md#required-symbols) in "Generic Microservice Requirements" for more details.
-
-### 2.5. Microservice API
-Each Microservice needs to provide an interface for the callers. It will be a package by the Microservice Vendor as part of the Microservice deployment.
-
-i. A static library to keep the custom Microservice API
-ii. Header Files
-
-This part is detailed in the [Microservice Implementation & Interface](#3-microservice-implementation-and-interface) section.
-
-### 2.6. Build
-
-------------------------------
-
-**Prerequisites**: Please see [Build System and Toolchain Setups](#a1-build-systems-and-toolchain-setups) section to select a preferred toolchain and setup the toolchain before build the Microservice.
-
-------------------------------
-
-There are various rules to build and get entities. And entities can be generated for different configurations by passing a \<CONFIG_NAME\> argument. 
-
-\<CONFIG_NAME\> must be a file under **Configuration/** directory with **"*.config"** extension.
-
-1. **"default" or "microservice"**: Build the Microservice and generates the Microservice executable.
-
-    > make CONFIG=\<CONFIG_NAME\>
-
-    or
-
-    > make microservice CONFIG=\<CONFIG_NAME\>
-
-    
-    Microservice Executable is generated under Output/\<uSERVICE_CPU_CORE\>/\<TOOLCHAIN\>\Image directory. There will be two version; \<uSERVICE_UID\>.bin (binary format) and \<uSERVICE_UID\>.hex (intel-hex format).
-
-2. **"userlib"**: Build the User Lib of Microservice and generates the static libraries and header files for caller executables to interact with Microservice.
-The developer can build the Microservice for various configurations.
-
-    > make userlib CONFIG=\<CONFIG_NAME\>
-
-    Microservice Executable is generated under Output/\<uSERVICE_CPU_CORE\>/\<TOOLCHAIN\>\UserLib folder.
-
-    \> UserLib is generated under Output/\<uSERVICE_CPU_CORE\>/\<TOOLCHAIN\>\UserLib directory. There will be a static file(libuS-\<uSERVICE_NAME\>UserLib_\<TOOLCHAIN\>.a) and the public header (us-\<uSERVICE_NAME\>.h) of the static library.
-
-3. **"package"**: Generates the whole deployment package for Microservice Store to submit.
-
-    i. Generates Microservice Executable
-
-    ii. Generates User Lib and API Headers
-
-    iii. Generates a ZIP file to submit to Microservice Store
-
-    > make package CONFIG=\<CONFIG_NAME\>
-
-### 2.7. Output & Deployment Files
-Outputs files are collected under **Output/\<uSERVICE_CPUCORE\>/\<TOOLCHAIN\>/** directory.
-
-The developer can use Image Outputs to submit the Microservices to the Microservice Store under **Output/\<uSERVICE_CPUCORE\>/\<TOOLCHAIN\>/Image**
-
-> * **\<uSERVICE_UID\>.bin** : Microservice Binary Output
-> * **\<uSERVICE_UID\>.hex** : Microservice IntelHex Output
-
-#### 2.7.1 Helper Outputs
-The developer can get more details about the Microservice for debug purposes.
-
-> * **\<uSERVICE_UID\>.elf** : ELF Output
-> * **\<uSERVICE_UID\>.elf.map** : MAP Output
-
-> * **ImageDetails/\<uSERVICE_UID\>.objdump** : Object dump
-> * **ImageDetails/\<uSERVICE_UID\>.size** : Symbols and Symbol Sizes
-> * **ImageDetails/\<uSERVICE_UID\>.sym** : Symbols
-
-## 3. Microservice Implementation and Interface
-
-> \> **IMPORTANT**: Before starting, the development environment can be challenging for developers to develop a portable and platform-agnostic microservice. Herein, the developer can use Simulation Environments that does not need hardware. See [Microservice Simulation Development Implementation](#34-microservice-simulation-environment) section.
-
-A Microservice basically is built by two parts
-
-i. Microservice Executable: A self-container independent and isolated execution. See [Microservice Implementation](#33-microservice-implementation)
-
-ii. An Interface, such as a static library and Header files, that run in the caller executions to interact with the Microservice. See [Microservice API](#32-creating-microservice-api)
-
-### 3.1. Internal Definitions
-
-> \> **RECOMMENDATION**: Create a us_Internal.h under Include/ directory for internal definitions, where the build system would use it for Package Generations. There is an template header under Include/ directory called "us_Internal.h"; you can modify and use it.
-
-It is recommended to define internal definitions, such as request and response packages structures, to share between Microservice and the User APIs called from Caller Executions.
-
-A Microservice Request and Response packages shares the same structure : HEADER (8-Bytes) + Payload.
-
-See the header structure below
-
-| Field            | Size |Description |
-|------------------|------|------------|
-| **Operation ID** | 16-Bit | Operation ID to parse the package |
-| **Status** | 16-Bit | Status of the custom operation. Mostly used for response packages. |
-| **Length** | 16-Bit | Length of the payload. |
-| __reserved | 16-Bit | Reserved |
-
-These structures are defined in "uService.h", and can be used to create the custom request/response structures.
-
-```C
-typedef struct
-{
-    /* uService Operation ID */
-    int16_t operation;
-    
-    /* uService Operation Status */
-    int16_t status;
-
-    /* The package length */
-    uint16_t length;
-    
-    uint16_t __reserved;
-} uServicePackageHeader;
-
-/* A template struct to show, header + payload offset */
-typedef struct
-{
-    uServicePackageHeader header;
-    
-    uint8_t payload[1];
-} uServicePackage;
-```
-
-Example; A microservice with Operating A,B an C, and operation C, needs to send two inputs like 32-bit integer and 8-Bytes Array, and returns 32-bit integer;
-
-```C
-typedef struct
-{
-    usInternalOp_A,
-    usInternalOp_B,
-    usInternalOp_C,
-} usInternalOp;
-
-...
-
-typedef struct
-{
-    uServicePackageHeader header;
-
-    struct
-    {
-        uint32_t arg0;
-        uint8_t buffer[8];
-    } payload;
-} usInternalOp_C_Request;
-
-typedef struct
-{
-    uServicePackageHeader header;
-
-    struct
-    {
-        uint32_t retval;
-    } payload;
-} usInternalOp_C_Response;
-```
-
-Now both Microservice and the UserLib can share the request and response for the Operation_C.
-
-There is a template header file under Include/ directory. us_Internal.h; developer is free to modify and implement this header.
-
-### 3.2 Creating Microservice API
-
-> \> **RECOMMENDATION**: Create a us-\<uSERVICE_NAME\>.h under Include/ directory as public header, where the build system would use it for Package Generations. There is an template header under Include/ directory called "us-Template.h"; you can rename and use it.
-
-Each microservice shall provide an API for callers to receive and answer the requests.
-
-> Microservice API runs in the Caller Executable and allows interaction with Microservice using the [Microservice User Lib](#311-creating-a-static-library)
-
-This API shall have
-i. Microservice API Functions
-ii. Microservice Specific Status/Error Definitions.
-iii. Microservice Specific Public Type Definitions
-
-There are some Mandatory and Optional APIs in addition to the Microservice Specific Features.
-
-| API                                 | Mandatory   | Description |
-|-------------------------------------|-------------|-------------|
-| uS_\<uSERVICE_NAME\>_Initialise()   | Yes         | The caller must call this function to use the Microservice |
-| uS_\<uSERVICE_NAME\>_OpenSession()  | Optional    | Open a session in Microservice to not mix or limit the requests.|
-| uS_\<uSERVICE_NAME\>_CloseSession() | Optional    | Close a session which opened by OpenSession().|
-
-And then, the developer is free to add any function to the API.
-
-> There is a template header under Include/ directory, called us_Template.h; the developer shall rename it the Microservice name, and define all the public API there. The recommended file notation is us-<uSERVICE_NAME>.h
-
-Each uService API shall return SysStatus type that shows the status of the interaction with the Microservice, such Success, or MicroserviceNotFound, InvalidAccessRight etc, but Microservice shall also define its custom statuses in us-<uSERVICE_NAME>.h
-And it is recommended to return microservice specific status as output parameter. 
-
-```C
-/* Microservice specific status definition */
-typedef enum
-{
-    us_<uSERVICE_NAME>Status_Success,
-    us_<uSERVICE_NAME>Status_UnsupportedOperation,
-    ...
-} us_<uSERVICE_NAME>Status;
-
-...
-
-SysStatus uS_<uSERVICE_NAME>_OperationC(/* Argument List */, us<uSERVICE_NAME>Status* usStatus);
-/* Check both function return and usStatus */
+$ make simulator CONFIG=sim
+
+Running simulator (timeout 1s)...
+========================================
+
+   0 > coreMQTT Microservice. Version : 1.0
+   1 > Container : Microservice Test User App
+   1 > Test Connect    : expected 0, actual 0 -> SUCCESS
+   1 > Test Subscribe  : expected 0, actual 0 -> SUCCESS
+   1 > Test Publish    : expected 0, actual 0 -> SUCCESS
+   1 > Test ProcessLoop: expected 0, actual 0 -> SUCCESS
+   1 > Test Disconnect : expected 0, actual 0 -> SUCCESS
+   1 > Test NoSession  : expected 4, actual 4 -> SUCCESS
+   1 > usTest : SUCCESS
+
+========================================
+Simulator run complete.
 
 ```
 
-#### 3.2.1 Creating a Static Library
-
-> \> **RECOMMENDATION**: There is a source file called UserLib.c under Source/UserLib/ directory, where the build system would use it to generate the API Static Library. The developer can use this file to implement the Microservice API.
-
-The developer shall implement a static library for caller executions that caller executions can use this library to interact with the Microservice.
-
-uS_\<uSERVICE_NAME\>_Initialise() implementation is special, and the developer can use the below implementation directly.
-```C
-SysStatus us_\<uSERVICE_NAME\>_Initialise(void)
-{
-    return uService_Initialise(USERVICE_NAME, &userLibSettings.execIndex);
-}
-```
-
-For the all API functions shall prepare a proper request package, and shall call uService_RequestBlocker() function to interact with the Microservice.
-
-```C
-
-SysStatus us_\<uSERVICE_NAME\>_OperationC(
-        /* Arg List*/, 
-        \<uSERVICE_NAME\>_Status* status)
-{
-    usOPCRequestPackage request = { /* Initialise, OP */}
-    usOPCResponsePackage response;
-
-    retVal = uService_RequestBlocker(
-        /* The index we got in us_\<uSERVICE_NAME\>_Initialise() */
-        userLibSettings.execIndex,
-        /* Request Package */
-        (uServicePackage*)&request,
-        /* Response Package */
-        (uServicePackage*)&response,
-        /* Timeout for the blocker operations */
-        timeoutInMs);
-    
-    if (retVal == SysStatus_Success)
-    {
-        /*
-         * Interaction successful but Microservice may have
-         * custom status reporting
-         */
-        *status = response.header.status;
-
-        /* Set all output parameters using response.payload */
-    }
-
-    return retVal;
-}
-
-``` 
-
-### 3.3 Microservice Implementation
-Microservice is a self-container, isolated executable and process the requests from other executables.
-
-A Microservice implements the following steps
-1. [Optional] Calls uService_PrintIntro() to print the its name and version. Developer is free to print anything.
-2. Initialise a MessageBox to receive messages from other executions. MessageBox capacity also defines the maximum number of the sessions a Microservice Accept. 
-    ```C
-    SYS_INITIALISE_IPC_MESSAGEBOX(retVal, <CFG_MAX_NUM_OF_SESSION>);
-    ```
-3. Start the Microservice, see below.
-
------------------------
-AI Code Generation: Microservices can be implemented using AI, and this template repository allows AI tools to integrate the generate the custom code using ".INC" (include) files.
-
-You may see "<b>#ifdef US_AI_GENERATED</b>" compiler switches which are "false" by default. In your final code, please feel free to remove these compiler switches.
-
-For example;
-From
-```C
-#ifdef US_AI_GENERATED
-    #include "us_public_headers.inc"
-#else /* US_AI_GENERATED */
-    #include "us-Template.h"
-#endif /* US_AI_GENERATED */
-```
-
-To
-```C
-#include "us-MyService.h"
-```
-
------------------------
-
-A Microservice can sleep until receive a request to not waste the CPU time and power.
-So a Microservice can be implemented in any way, multi-threaded or a super loop.
-
-Herein, see an example with a basic Super-Loop implementation.
-
-```C
-void startService(void)
-{
-    while (true)
-    {
-        bool dataReceived = false;
-        int receivedLen = 0;
-        
-        /* Sleep until receive an IPC message */
-        Sys_WaitForEvent(SysEvent_IPCMessage, 0);
-
-        (void)Sys_IsMessageReceived(&dataReceived, &receivedLen, &sequenceNo);       
-        if (!dataReceived || receivedLen == 0)
-        {
-            continue;
-        }
-
-        /*
-         * TODO : Check for "receivedLen" if enough or will
-         * exceed the receive buffer?
-         */
-
-        /* Get the message */
-        (void)Sys_ReceiveMessage(&senderID, (uint8_t*)&request, 
-                                 receivedLen, &sequenceNo);
-
-        /* Process the request */
-        processRequest(senderID, &request);
-    }
-}
-
-void processRequest(uint8_t senderID, usRequestPackage* request)
-{
-    switch (request->header.operation)
-    {
-        case /**/:
-            /* 
-             * 1. Process the payload
-             * 2. Prepare Request
-             * 3. Send response to the Sender using senderID
-             */             
-            Sys_SendMessage(senderID, (uint8_t*)&response,
-                            sizeof(usResponsePackage),
-                            &sequenceNo);
-            break;
-        default:
-            break;
-    }
-}
-
-```
-
-#### 3.3.1 Using External Libraries
-The developer is free to include source or include files from any external library, likely Github. 
-The developer is also free to collect the external libraries in the project structure but the template repository provides a "makefile rule" to download the repositories under Libs folder.
-
-1. Add the external repository URLs and SHAs in Libs/libraries.txt, line by line.
-Please see an example below;
-
-    ```
-    https://github.com/kokke/tiny-AES-c,2385675
-    https://github.com/kokke/tiny-HMAC-c,b371993
-    ```
-
-Then, run 
-> make init_repo
-
-This repo clones the repositories under the Libs.
-
-### 3.4 Microservice Simulation Environment
-A microservice shall support different environments, CPU processors but the developer shall keep in mind a Microservice shall be portable and environment(toolchain/CPU etc) agnostic.
-
-Herein, Microservice Store provides simulation environments for developers to develop their Microservices with no hardware need.
-
-#### 3.4.1 Microservice Windows Form Simulation
-
-Windows Forms allow developers to simulate the hardware environments using the Windows Form to interact with the Microservice or Microservice caller User Applications, such as simulating an LCD with a text box or a physical button with a Form Button.
-
-Windows Forms also offers likely unlimited debugging capabilities, unlimited breakpoints and accessible low level resource simulations.
-
-To run the Windows Simulation
-1. Download the "x86" package to Environment/CPU/
-
-2. There are two Visual Studio Project that needs to run parallel, like Microservices on Microcontrollers. Please run **Environment/Simulator/Windows/uServiceSimulator/usSimulator.sln** and **Environment/Simulator/Windows/UserAppSimulator/UserAppSimulator.sln**
-
-3. Configure the Simulation Projects
-<br>
-See See [Configure Simulations](Environment\Simulator\Windows\README.md).
-
-4. You will see 
-    > \> us Test Success
-
-    This is an example Microservice that has one API that sums two integer.
-
-    ```C
-    int main(void)
-    {
-        SysStatus retVal;
-
-        LOG_PRINTF(" > Container : Microservice Test User App");
-
-        SYS_INITIALISE_IPC_MESSAGEBOX(retVal, 4);
-
-        retVal = us_Template_Initialise();
-        CHECK_US_ERR(retVal, 0);
-
-        {
-            usStatus usStatus;
-            int32_t a = 5;
-            int32_t b = 6;
-            int32_t expectedResult = a + b;
-            int32_t result = 0;
-
-            retVal = us_Template_Sum(a, b, &result, &usStatus);
-            CHECK_US_ERR(retVal, usStatus);
-
-            LOG_PRINTF(" > us Test %s",
-                result == expectedResult ? "Success" : "Failed");
-        }
-    }
-    ```
-
-    The developer, then, can follow the example to implement its custom functionalities.
-
-## 4. Microservice Quality & Testing
-### 4.1. Unit Tests including Coverage and Static Analysis
-You can implement test code in Environment/Test/Unittests/unittest.c using "Unity Test Framework", and you can run the unit tests using the following command
-
-> make unittest
-
-1. Runs the all Unit Test Cases
-2. Runs the test covarage.
-3. Runs Static Analysis on the Microservice Implementation.
-
-```C
----------------------------------------------------------------
------------------ WHITEBOX SW TESTS ---------------------------
-
-Environment/Test/UnitTests/unittest.c:35:test_HelloWorld:PASS
-Environment/Test/UnitTests/unittest.c:40:test_sum:PASS
-
------------------------
-2 Tests 0 Failures 0 Ignored
-
-
----------------------------------------------------------------
----------------- TEST CODE COVERAGE ---------------------------
-
-    Include/AIGenerated/operation_func.inc       : 100.00% of 2
-
----------------------------------------------------------------
---------------- SOURCE CODE ANALYSIS --------------------------
-
-Splint 3.1.1 --- 12 April 2003
-
-Finished checking --- no warnings
-
----------------------------------------------------------------
-
-```
-
-## A. APPENDIX
-
-### A.1. Build Systems and Toolchain Setups
-
-#### A.1.1. MSYS2 for Windows
-A Microservice package can be generated in Windows using MSYS2 Linux Emualtor.
-
-1. Please install MSYS2 first : https://repo.msys2.org/distrib/i686/
-
-   The test version is "msys2-base-i686-20210705.sfx.exe 	05-Jul-2021 20:58"
-
-2. And download the required packages from the MSYS2 console
-
-    Make to build
-    > pacman -S make
-
-    **[Optional]** x86 GCC for Unit tests.
-    > pacman -S gcc
-
-    **[Optional]** Python for Helper Scripts such as Test
-    > pacman -S python
-
-    **[Optional]** Ruby for Helper Scripts such as Unit Tests(Unity)
-    > pacman -S ruby
-
-    **[Optional]** Helper tools may need to be unzipped.
-    > pacman -S unzip
+### Configurations
+Please see `Configurations/sim.config` for the configurations.

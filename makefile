@@ -66,6 +66,9 @@ ASM_FILES := \
 SOURCE_FILES := \
 	$(uSERVICE_SOURCE_FILES)
 
+# Expand any shell-generated source lists from the simulator config.
+SOURCE_FILES := $(shell echo $(SOURCE_FILES))
+
 INCLUDE_DIRS := \
 	-I$(uSERVICE_PACKAGE_PATH)/Include \
 	-I$(uSERVICE_PACKAGE_PATH)/Include/SysCall \
